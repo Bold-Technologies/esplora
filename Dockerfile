@@ -1,9 +1,8 @@
 FROM blockstream/esplora-base:latest AS build
 
-FROM debian:bullseye@sha256:4d6ab716de467aad58e91b1b720f0badd7478847ec7a18f66027d0f8a329a43c
+FROM debian:bullseye@sha256:630454da4c59041a2bca987a0d54c68962f1d6ea37a3641bd61db42b753234f2
 
 COPY --from=build /srv/explorer /srv/explorer
-COPY --from=build /srv/wally_wasm /srv/wally_wasm
 COPY --from=build /root/.nvm /root/.nvm
 
 RUN apt-get -yqq update \
@@ -32,12 +31,6 @@ RUN source /root/.nvm/nvm.sh \
     npm run dist -- bitcoin-signet \
  && DEST=/srv/explorer/static/bitcoin-regtest \
     npm run dist -- bitcoin-regtest \
- && DEST=/srv/explorer/static/liquid-mainnet \
-    npm run dist -- liquid-mainnet \
- && DEST=/srv/explorer/static/liquid-testnet \
-    npm run dist -- liquid-testnet \
- && DEST=/srv/explorer/static/liquid-regtest \
-    npm run dist -- liquid-regtest \
  && DEST=/srv/explorer/static/bitcoin-mainnet-blockstream \
     npm run dist -- bitcoin-mainnet blockstream \
  && DEST=/srv/explorer/static/bitcoin-testnet-blockstream \
@@ -45,16 +38,7 @@ RUN source /root/.nvm/nvm.sh \
  && DEST=/srv/explorer/static/bitcoin-signet-blockstream \
     npm run dist -- bitcoin-signet blockstream \
  && DEST=/srv/explorer/static/bitcoin-regtest-blockstream \
-    npm run dist -- bitcoin-regtest blockstream \
- && DEST=/srv/explorer/static/liquid-mainnet-blockstream \
-    npm run dist -- liquid-mainnet blockstream \
- && DEST=/srv/explorer/static/liquid-testnet-blockstream \
-    npm run dist -- liquid-testnet blockstream \
- && DEST=/srv/explorer/static/liquid-regtest-blockstream \
-    npm run dist -- liquid-regtest blockstream
-
-# symlink the libwally wasm files into liquid's www directories (for client-side unblinding)
-RUN for dir in /srv/explorer/static/liquid*; do ln -s /srv/wally_wasm $dir/libwally; done
+    npm run dist -- bitcoin-regtest blockstream
 
 # configuration
 RUN cp /srv/explorer/source/run.sh /srv/explorer/

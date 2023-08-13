@@ -9,7 +9,7 @@ SYNC_SECRET=$4
 SYNC_SOURCE=$5
 
 if [ -z "$FLAVOR" ] || [ ! -d /srv/explorer/static/$FLAVOR ]; then
-    echo "Please provide bitcoin-mainnet, bitcoin-testnet, bitcoin-signet, bitcoin-regtest, liquid-mainnet, liquid-testnet or liquid-regtest as a parameter"
+    echo "Please provide bitcoin-mainnet, bitcoin-testnet, bitcoin-signet or bitcoin-regtest as a parameter"
     echo "For example run.sh bitcoin-mainnet explorer"
     exit 1
 fi
@@ -28,14 +28,8 @@ if [ "$DAEMON-$NETWORK" == "bitcoin-testnet" ]; then
   DAEMON_DIR="$DAEMON_DIR/testnet3"
 elif [ "$DAEMON-$NETWORK" == "bitcoin-signet" ]; then
   DAEMON_DIR="$DAEMON_DIR/signet"
-elif [ "$DAEMON-$NETWORK" == "liquid-mainnet" ]; then
-  DAEMON_DIR="$DAEMON_DIR/liquidv1"
-elif [ "$DAEMON-$NETWORK" == "liquid-testnet" ]; then
-  DAEMON_DIR="$DAEMON_DIR/liquidtestnet"
 elif [ "$DAEMON-$NETWORK" == "bitcoin-regtest" ]; then
   DAEMON_DIR="$DAEMON_DIR/regtest"
-elif [ "$DAEMON-$NETWORK" == "liquid-regtest" ]; then
-  DAEMON_DIR="$DAEMON_DIR/liquidregtest"
 fi
 
 
@@ -52,48 +46,11 @@ NGINX_NOSLASH_PATH="unused"
 NGINX_REWRITE_NOJS='return 301 " /nojs$uri"'
 NGINX_CSP="default-src 'self'; script-src 'self' 'unsafe-eval'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; object-src 'none'"
 
-if [ "${DAEMON}" != "liquid" ]; then
-    if [ "$NETWORK" == "testnet" ] || [ "$NETWORK" == "signet" ] || [ "$NETWORK" == "regtest" ]; then
-        NGINX_PATH="$NETWORK/"
-        NGINX_NOSLASH_PATH="$NETWORK"
-        NGINX_REWRITE='rewrite ^/'$NETWORK'(/.*)$ $1 break;'
-        NGINX_REWRITE_NOJS='rewrite ^/'$NETWORK'(/.*)$ " /'$NETWORK'/nojs$1?" permanent'
-    fi
-else
-    if [ "${NETWORK}" == "regtest" ]; then
-        ELECTRS_NETWORK="liquidregtest"
-        PARENT_NETWORK="--parent-network regtest"
-        NGINX_PATH="liquidregtest/"
-        NGINX_REWRITE='rewrite ^/liquidregtest(/.*)$ $1 break;'
-        NGINX_REWRITE_NOJS='rewrite ^/liquidregtest(/.*)$ " /liquidregtest/nojs$1?" permanent'
-        NGINX_NOSLASH_PATH="liquidregtest"
-
-	# The --jsonrpc-import works around electrs not yet being aware of the magic number change for liquid regtest in elements 21.
-        ELECTRS_ARGS="$ELECTRS_ARGS --jsonrpc-import"
-    elif [ "${NETWORK}" == "testnet" ]; then
-        ELECTRS_NETWORK="liquidtestnet"
-        PARENT_NETWORK="--parent-network regtest"
-        NGINX_PATH="liquidtestnet/"
-        NGINX_REWRITE='rewrite ^/liquidtestnet(/.*)$ $1 break;'
-        NGINX_REWRITE_NOJS='rewrite ^/liquidtestnet(/.*)$ " /liquidtestnet/nojs$1?" permanent'
-        NGINX_NOSLASH_PATH="liquidtestnet"
-
-        # The --jsonrpc-import works around electrs not yet being aware of the magic number change for liquid testnet
-        ELECTRS_ARGS="$ELECTRS_ARGS --jsonrpc-import --asset-db-path /srv/liquid-assets-db"
-        ASSETS_GIT=${ASSETS_GIT:-https://github.com/Blockstream/asset_registry_testnet_db}
-        ASSETS_GPG=${ASSETS_GPG:-/srv/explorer/source/contrib/asset_registry_testnet_pubkey.asc}
-    else
-        ELECTRS_NETWORK="liquid"
-        PARENT_NETWORK="--parent-network bitcoin"
-        NGINX_PATH="liquid/"
-        NGINX_REWRITE='rewrite ^/liquid(/.*)$ $1 break;'
-        NGINX_REWRITE_NOJS='rewrite ^/liquid(/.*)$ " /liquid/nojs$1?" permanent'
-        NGINX_NOSLASH_PATH="liquid"
-
-        ELECTRS_ARGS="$ELECTRS_ARGS --asset-db-path /srv/liquid-assets-db"
-        ASSETS_GIT=${ASSETS_GIT:-https://github.com/Blockstream/asset_registry_db}
-        ASSETS_GPG=${ASSETS_GPG:-/srv/explorer/source/contrib/asset_registry_pubkey.asc}
-    fi
+if [ "$NETWORK" == "testnet" ] || [ "$NETWORK" == "signet" ] || [ "$NETWORK" == "regtest" ]; then
+    NGINX_PATH="$NETWORK/"
+    NGINX_NOSLASH_PATH="$NETWORK"
+    NGINX_REWRITE='rewrite ^/'$NETWORK'(/.*)$ $1 break;'
+    NGINX_REWRITE_NOJS='rewrite ^/'$NETWORK'(/.*)$ " /'$NETWORK'/nojs$1?" permanent'
 fi
 
 NGINX_LOGGING="access_log off"
@@ -179,24 +136,6 @@ fi
 
 preprocess /srv/explorer/source/contrib/${DAEMON}-${NETWORK}-${MODE}.conf.in /data/.${DAEMON}.conf
 
-if [ "$DAEMON" == "liquid" ]; then
-    if [ "$NETWORK" == "mainnet" ]; then
-        mkdir -p /etc/service/bitcoin/log /data/logs/bitcoin
-        preprocess /srv/explorer/source/contrib/bitcoin-mainnet-pruned-for-liquid.conf.in /data/.bitcoin.conf
-        cp /srv/explorer/source/contrib/runits/bitcoin_for_liquid.runit /etc/service/bitcoin/run
-        cp /srv/explorer/source/contrib/runits/bitcoin_for_liquid-log.runit /etc/service/bitcoin/log/run
-        cp /srv/explorer/source/contrib/runits/bitcoin_for_liquid-log-config.runit /data/logs/bitcoin/config
-    fi
-
-    if [ "$NETWORK" == "mainnet" ] || [ "$NETWORK" == "testnet" ]; then
-        mkdir -p /etc/service/liquid-assets-poller/log /data/logs/poller
-        preprocess /srv/explorer/source/contrib/runits/liquid-assets-poller.runit /etc/service/liquid-assets-poller/run
-        cp /srv/explorer/source/contrib/runits/liquid-assets-poller-log.runit /etc/service/liquid-assets-poller/log/run
-        cp /srv/explorer/source/contrib/runits/liquid-assets-poller-log-config.runit /data/logs/poller/config
-        chmod +x /etc/service/liquid-assets-poller/run
-    fi
-fi
-
 if [ -f /data/public_nodes ]; then
     cat /data/public_nodes >> /data/.${DAEMON}.conf
 fi
@@ -231,17 +170,6 @@ if [ -n "$SYNC_SECRET" ]; then
 fi
 
 preprocess /srv/explorer/source/cli.sh.in /usr/bin/cli
-if [ "${DAEMON}" == "liquid" ]; then
-    DAEMON=bitcoin
-    preprocess /srv/explorer/source/cli.sh.in /usr/bin/cli_bitcoin
-    DAEMON=liquid
-    chmod +x /usr/bin/cli_bitcoin
-
-    # insert nginx-liquid-assets.conf into the server {  } block
-    preprocess /srv/explorer/source/contrib/nginx-liquid-assets.conf.in /tmp/nginx-liquid-assets.conf
-    sed -i '/^server {/r /tmp/nginx-liquid-assets.conf' /etc/nginx/sites-enabled/default
-    rm /tmp/nginx-liquid-assets.conf
-fi
 
 if [ -n "$ONION_URL" ]; then
     # insert the Onion-Location `map` BEFORE the server { } block
@@ -263,11 +191,7 @@ cp /srv/explorer/source/contrib/runits/nodedaemon-log-config.runit /data/logs/no
 chmod +x /etc/service/${DAEMON}/run
 
 if [ "${NETWORK}" == "regtest" ] && [ -z "${NO_REGTEST_MINING}" ]; then
-    if [ "${DAEMON}" != "liquid" ]; then
-        /srv/explorer/bitcoin/bin/bitcoind -conf=/data/.bitcoin.conf -datadir=/data/bitcoin -daemon -regtest
-    else
-        /srv/explorer/$DAEMON/bin/${DAEMON}d -conf=/data/.$DAEMON.conf -datadir=/data/$DAEMON -daemon
-    fi
+    /srv/explorer/bitcoin/bin/bitcoind -conf=/data/.bitcoin.conf -datadir=/data/bitcoin -daemon -regtest
     echo "Creating default wallet"
     cli -rpcwait loadwallet default || cli createwallet default
     address=$(cli -rpcwait getnewaddress)
@@ -278,17 +202,10 @@ fi
 # Sync mempool and feeestimation contents from SYNC_SOURCE
 if [ -n "$SYNC_SOURCE" ]; then
   # wait for bitcoind to fully sync up,
-  if [ "${DAEMON}-${NETWORK}" == "liquid-mainnet" ]; then
-    /srv/explorer/bitcoin/bin/bitcoind -conf=/data/.bitcoin.conf -datadir=/data/bitcoin -daemon
-    /srv/explorer/source/contrib/bitcoind-wait-sync.sh cli_bitcoin
-  fi
   /srv/explorer/$DAEMON/bin/${DAEMON}d -conf=/data/.$DAEMON.conf -datadir=/data/$DAEMON -daemon
   /srv/explorer/source/contrib/bitcoind-wait-sync.sh cli
   # stop it,
   cli stop
-  if [ "${DAEMON}-${NETWORK}" == "liquid-mainnet" ]; then
-    cli_bitcoin stop
-  fi
   sleep 2 # without this, the download below would occasionally start while the terminating bitcoind is still flushing its mempool.dat
   # then fetch a recent mempool.dat,
   curl -v -u sync:$SYNC_SECRET -o $DAEMON_DIR/mempool.dat $SYNC_SOURCE/mempool || true
